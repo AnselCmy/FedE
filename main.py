@@ -158,7 +158,7 @@ class KGERunner():
             self.kge_model.train()
             for batch in self.train_dataloader:
 
-                positive_sample, negative_sample, subsampling_weight, mode = batch
+                positive_sample, negative_sample, subsampling_weight = batch
 
                 positive_sample = positive_sample.to(args.gpu)
                 negative_sample = negative_sample.to(args.gpu)
@@ -166,28 +166,19 @@ class KGERunner():
 
                 negative_score = self.kge_model((positive_sample, negative_sample),
                                                   self.relation_embedding,
-                                                  self.entity_embedding,
-                                                  mode=mode)
+                                                  self.entity_embedding)
 
-                if args.negative_adversarial_sampling:
-                    # In self-adversarial sampling, we do not apply back-propagation on the sampling weight
-                    negative_score = (F.softmax(negative_score * args.adversarial_temperature, dim=1).detach()
-                                      * F.logsigmoid(-negative_score)).sum(dim=1)
-                else:
-                    negative_score = F.logsigmoid(-negative_score).mean(dim=1)
+                # In self-adversarial sampling, we do not apply back-propagation on the sampling weight
+                negative_score = (F.softmax(negative_score * args.adversarial_temperature, dim=1).detach()
+                                  * F.logsigmoid(-negative_score)).sum(dim=1)
 
                 positive_score = self.kge_model(positive_sample,
-                                                self.relation_embedding,
-                                                self.entity_embedding)
+                                                self.relation_embedding, self.entity_embedding, neg=False)
 
                 positive_score = F.logsigmoid(positive_score).squeeze(dim=1)
 
-                if args.uni_weight:
-                    positive_sample_loss = - positive_score.mean()
-                    negative_sample_loss = - negative_score.mean()
-                else:
-                    positive_sample_loss = - (subsampling_weight * positive_score).sum() / subsampling_weight.sum()
-                    negative_sample_loss = - (subsampling_weight * negative_score).sum() / subsampling_weight.sum()
+                positive_sample_loss = - positive_score.mean()
+                negative_sample_loss = - negative_score.mean()
 
                 loss = (positive_sample_loss + negative_sample_loss) / 2
 
@@ -245,13 +236,12 @@ class KGERunner():
         all_ranks = []
         for batch in dataloader:
 
-            triplets, labels, mode, triple_idx = batch
+            triplets, labels, triple_idx = batch
             triplets, labels = triplets.to(args.gpu), labels.to(args.gpu)
             head_idx, rel_idx, tail_idx = triplets[:, 0], triplets[:, 1], triplets[:, 2]
             pred = self.kge_model((triplets, None),
                                    self.relation_embedding,
-                                   self.entity_embedding,
-                                   mode=mode)
+                                   self.entity_embedding)
             b_range = torch.arange(pred.size()[0], device=self.args.gpu)
             target_pred = pred[b_range, tail_idx]
             pred = torch.where(labels.byte(), -torch.ones_like(pred) * 10000000, pred)
@@ -298,21 +288,20 @@ class KGERunner():
         results = ddict(float)
 
         if eval_split == 'test':
-            dataloader = self.test_dataloader_tail
+            dataloader = self.test_dataloader
         elif eval_split == 'valid':
-            dataloader = self.valid_dataloader_tail
+            dataloader = self.valid_dataloader
 
         pred_list = []
         rank_list = []
         results_list = []
         for batch in dataloader:
-            triplets, labels, mode = batch
+            triplets, labels = batch
             triplets, labels = triplets.to(args.gpu), labels.to(args.gpu)
             head_idx, rel_idx, tail_idx = triplets[:, 0], triplets[:, 1], triplets[:, 2]
             pred = self.kge_model((triplets, None),
                                   self.relation_embedding,
-                                  self.entity_embedding,
-                                  mode=mode)
+                                  self.entity_embedding)
             b_range = torch.arange(pred.size()[0], device=self.args.gpu)
             target_pred = pred[b_range, tail_idx]
             pred = torch.where(labels.byte(), -torch.ones_like(pred) * 10000000, pred)
@@ -476,7 +465,7 @@ if __name__ == '__main__':
     parser.add_argument('--state_dir', '-state_dir', default='./state', type=str)
     parser.add_argument('--log_dir', '-log_dir', default='./log', type=str)
     parser.add_argument('--tb_log_dir', '-tb_log_dir', default='./tb_log', type=str)
-    parser.add_argument('--run_mode', default='FedE', choices=['FedE',
+    parser.add_argument('--run_mode', default='Single', choices=['FedE',
                                                                         'Single',
                                                                         'Entire',
                                                                         'test_pretrain',
