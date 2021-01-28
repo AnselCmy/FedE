@@ -193,7 +193,7 @@ class KGERunner():
                 self.write_training_loss(np.mean(losses), epoch)
 
             if epoch % self.args.check_per_epoch == 0:
-                if args.run_mode == 'multi_client_train':
+                if args.run_mode == 'Entire':
                     eval_res = self.evaluate_multi()
                 else:
                     eval_res = self.evaluate()
@@ -465,7 +465,7 @@ if __name__ == '__main__':
     parser.add_argument('--state_dir', '-state_dir', default='./state', type=str)
     parser.add_argument('--log_dir', '-log_dir', default='./log', type=str)
     parser.add_argument('--tb_log_dir', '-tb_log_dir', default='./tb_log', type=str)
-    parser.add_argument('--run_mode', default='Single', choices=['FedE',
+    parser.add_argument('--run_mode', default='Entire', choices=['FedE',
                                                                         'Single',
                                                                         'Entire',
                                                                         'test_pretrain',

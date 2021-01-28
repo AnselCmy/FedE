@@ -121,7 +121,7 @@ class TestDataset_Entire(Dataset):
     def collate_fn(data):
         triple = torch.stack([_[0] for _ in data], dim=0)
         trp_label = torch.stack([_[1] for _ in data], dim=0)
-        triple_idx = torch.stack([_[3] for _ in data], dim=0)
+        triple_idx = torch.stack([_[2] for _ in data], dim=0)
         return triple, trp_label, triple_idx
 
     def __getitem__(self, idx):
