@@ -1,26 +1,24 @@
-# @Author   : Chen Mingyang
-# @Time     : 2020/9/19
-# @FileName : fusion.py
-
 import os
 from kge_model import KGEModel
 from dataloader import *
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 import numpy as np
 import logging
 from tqdm import tqdm
 
 
-def train_fusion(args, all_data, num_clients, one_client_state_str, fed_state_str):
+def train_fusion(args, all_data, num_clients, fusion_state):
+    one_client_state_str, fed_state_str = fusion_state
+    fed_state_str = f'{fed_state_str}.best'
+
     result_list = []
     test_len_list = np.zeros(num_clients)
     for i in range(num_clients):
         data = all_data[i]
-        curr_client_state_str = one_client_state_str.format(i)
-        res, test_len = get_valid_score(args, i, data, curr_client_state_str, fed_state_str)
+        curr_client_state_str = f'{one_client_state_str}_client_{i}.best'
+        res, test_len = fusion_on_client(args, i, data, curr_client_state_str, fed_state_str)
         result_list.append(res)
         test_len_list[i] = test_len
 
@@ -36,12 +34,8 @@ def train_fusion(args, all_data, num_clients, one_client_state_str, fed_state_st
         results['mrr'], results['hits@1'],
         results['hits@5'], results['hits@10']))
 
-def get_valid_score(args, idx, data, one_client_state_str, fed_state_str):
-    # data = all_data[2]
-    # one_client_state_str = 'fb15k237_fed5_client_2.best'
-    # multi_state_str = 'fb15k237_fed5_multi.best'
-    # dataset = 'fb15k237_fed5'
 
+def fusion_on_client(args, idx, data, one_client_state_str, fed_state_str):
     kge_model = KGEModel(args, model_name=args.model)
 
     # trained embedding
@@ -85,14 +79,15 @@ def get_valid_score(args, idx, data, one_client_state_str, fed_state_str):
                              data['test']['edge_index'][1])).T
 
     all_triples = np.concatenate([train_triples, valid_triples, test_triples])
-    valid_train_dataset = TrainDataset(valid_triples, nentity, args.num_neg, 'tail-batch', all_triples)
+    # valid_train_dataset = TrainDataset(valid_triples, nentity, args.num_neg, 'tail-batch', all_triples)
+    valid_train_dataset = TrainDataset(valid_triples, nentity, args.num_neg)
     test_dataset = TestDataset(test_triples, all_triples, nentity, 'tail-batch')
-    valid_train_dataloader_tail = DataLoader(
+    valid_train_dataloader = DataLoader(
         valid_train_dataset,
         batch_size=args.batch_size,
         collate_fn=TrainDataset.collate_fn
     )
-    test_dataloader_tail = DataLoader(
+    test_dataloader = DataLoader(
         test_dataset,
         batch_size=args.test_batch_size,
         collate_fn=TestDataset.collate_fn
@@ -106,25 +101,21 @@ def get_valid_score(args, idx, data, one_client_state_str, fed_state_str):
     t = tqdm(range(500))
     for epoch in t:
         losses = []
-        for batch in valid_train_dataloader_tail:
-            positive_sample, negative_sample, subsampling_weight, mode = batch
+        for batch in valid_train_dataloader:
+            positive_sample, negative_sample, _ = batch
 
             positive_sample = positive_sample.to(args.gpu)
             negative_sample = negative_sample.to(args.gpu)
 
             negative_score = kge_model((positive_sample, negative_sample),
-                                        rel_embed, ent_embed, mode=mode)
-            # negative_score = F.logsigmoid(-negative_score)
+                                        rel_embed, ent_embed)
 
             negative_score_fed = kge_model((positive_sample, negative_sample),
-                                              rel_embed_fed, ent_embed_fed, mode=mode)
-            # negative_score_multi = F.logsigmoid(-negative_score_multi)
+                                              rel_embed_fed, ent_embed_fed)
 
-            positive_score = kge_model(positive_sample, rel_embed, ent_embed).squeeze(dim=1)
-            # positive_score = F.logsigmoid(positive_score)
+            positive_score = kge_model(positive_sample, rel_embed, ent_embed, neg=False).squeeze(dim=1)
 
-            positive_score_fed = kge_model(positive_sample, rel_embed_fed, ent_embed_fed).squeeze(dim=1)
-            # positive_score_multi = F.logsigmoid(positive_score_multi)
+            positive_score_fed = kge_model(positive_sample, rel_embed_fed, ent_embed_fed, neg=False).squeeze(dim=1)
 
             neg_score = torch.cat([negative_score.unsqueeze(2), negative_score_fed.unsqueeze(2)], dim=-1)
             pos_score = torch.cat([positive_score.unsqueeze(1), positive_score_fed.unsqueeze(1)], dim=-1)
@@ -132,7 +123,6 @@ def get_valid_score(args, idx, data, one_client_state_str, fed_state_str):
             neg_out = linear(neg_score)
             pos_out = linear(pos_score)
 
-            # loss = (-neg_out.mean() + -pos_out.mean()) / 2
             loss = criterion(pos_out, torch.mean(neg_out, dim=-1), torch.LongTensor([1]).to(args.gpu))
 
             t.set_postfix({'loss': '{:.4f}'.format(loss)})
@@ -143,20 +133,15 @@ def get_valid_score(args, idx, data, one_client_state_str, fed_state_str):
 
             losses.append(loss.item())
 
-        # logging.info('epoch: {} | loss: {:.4f}'.format(epoch, np.mean(losses)))
-
     torch.save(linear.state_dict(), os.path.join(args.state_dir, one_client_state_str + '.fusion'))
 
-    # linear = nn.Linear(in_features=2, out_features=1).to(args.gpu)
-    # linear.load_state_dict(torch.load(os.path.join(args.state_dir, dataset + '.fusion')))
-
     results = ddict(float)
-    for batch in test_dataloader_tail:
-        triplets, labels, mode = batch
+    for batch in test_dataloader:
+        triplets, labels = batch
         triplets, labels = triplets.to(args.gpu), labels.to(args.gpu)
         head_idx, rel_idx, tail_idx = triplets[:, 0], triplets[:, 1], triplets[:, 2]
-        pred = kge_model((triplets, None), rel_embed, ent_embed, mode=mode)
-        pred_multi = kge_model((triplets, None), rel_embed_fed, ent_embed_fed, mode=mode)
+        pred = kge_model((triplets, None), rel_embed, ent_embed)
+        pred_multi = kge_model((triplets, None), rel_embed_fed, ent_embed_fed)
         pred = torch.cat([pred.unsqueeze(-1), pred_multi.unsqueeze(-1)], dim=-1)
         pred = linear(pred).squeeze(-1)
 
@@ -186,4 +171,4 @@ def get_valid_score(args, idx, data, one_client_state_str, fed_state_str):
         results['mrr'], results['hits@1'],
         results['hits@5'], results['hits@10']))
 
-    return results, len(test_dataloader_tail.dataset)
+    return results, len(test_dataloader.dataset)

@@ -1,9 +1,4 @@
-# @Author   : Chen Mingyang
-# @Time     : 2020/9/3
-# @FileName : z_fed.py
-
 from dataloader import *
-import pickle
 import os
 import copy
 import logging
@@ -150,7 +145,7 @@ class FedE(object):
 
         self.args.nentity = nentity
 
-        # client
+        # clients
         self.num_clients = len(train_dataloader_list)
         self.clients = [
             Client(args, i, all_data[i], train_dataloader_list[i], valid_dataloader_list[i],

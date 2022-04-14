@@ -1,7 +1,3 @@
-# @Author   : Chen Mingyang
-# @Time     : 2020/9/2
-# @FileName : z_dataloader.py
-
 import numpy as np
 import torch
 import torch.nn as nn
