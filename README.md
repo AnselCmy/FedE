@@ -2,7 +2,7 @@
 
 This repository is the implementation of IJCKG 2021 paper: [FedE: Embedding Knowledge Graphs in Federated Setting](https://dl.acm.org/doi/fullHtml/10.1145/3502223.3502233). In this work, we propose a Federated Knowledge Graph Embedding framework, FedE, focusing on learning knowledge graph embeddings by aggregating locally-computed updates.
 
-<p align="center"><img src='./img/overview.pdf' width='70%' /></p>
+<p align="center"><img src='./img/overview.png' width='70%' /></p>
 
 
 ## Requirements
