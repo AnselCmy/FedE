@@ -1,3 +1,9 @@
+*****************************************************************
+
+We move our code repository to [zjukg/FedE](https://github.com/zjukg/FedE), and maintain this project there. If you are interested in this code, please go to [zjukg/FedE](https://github.com/zjukg/FedE).
+
+*****************************************************************
+
 # FedE
 
 This repository is the implementation of IJCKG 2021 paper: [FedE: Embedding Knowledge Graphs in Federated Setting](https://dl.acm.org/doi/fullHtml/10.1145/3502223.3502233). In this work, we propose a Federated Knowledge Graph Embedding framework, FedE, focusing on learning knowledge graph embeddings by aggregating locally-computed updates.
