@@ -1,8 +1,8 @@
-*****************************************************************
+********************** **Note** **********************
 
 We move our code repository to [zjukg/FedE](https://github.com/zjukg/FedE), and maintain this project there. If you are interested in this code, please go to [zjukg/FedE](https://github.com/zjukg/FedE).
 
-*****************************************************************
+********************** **Note** **********************
 
 # FedE
 
